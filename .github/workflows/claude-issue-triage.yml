@@ -1,0 +1,78 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+jobs:
+  triage:
+    if: github.event.sender.type != 'Bot'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Issue Triage
+        id: claude-triage
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh label list:*),Read,Grep,Glob"'
+
+          prompt: |
+            Analiza el issue #${{ github.event.issue.number }} de este repositorio
+            (Tetris vanilla: `index.html`, `style.css`, `game.js`, sin build ni deps).
+
+            Pasos:
+
+            1. Lee el issue completo:
+               `gh issue view ${{ github.event.issue.number }} --json title,body,labels,comments`
+
+            2. Lee el código relevante (`game.js`, `index.html`, `style.css`) con Read/Grep
+               para localizar el área afectada por el problema descrito. Recuerda el gotcha
+               del repo: las constantes `COLS`, `ROWS`, `BLOCK` en `game.js` deben mantenerse
+               sincronizadas con `width`/`height` del `<canvas id="board">` en `index.html`
+               (`width = COLS * BLOCK`, `height = ROWS * BLOCK`). Si el issue toca tamaño de
+               tablero o rendering, evalúa explícitamente si este gotcha aplica.
+
+            3. Asigna 1 a 3 labels usando EXCLUSIVAMENTE esta lista (no inventes labels nuevos):
+               bug, enhancement, documentation, question, duplicate, invalid, wontfix,
+               help wanted, good first issue.
+               Aplícalos con `gh issue edit ${{ github.event.issue.number }} --add-label "..."`.
+               No quites labels que ya haya puesto un humano.
+
+            4. Publica UN comentario con
+               `gh issue comment ${{ github.event.issue.number }} --body-file <archivo>`
+               (escribe el body a un archivo temporal antes). El comentario debe ser en
+               español, con esta estructura fija (los identificadores de código en inglés):
+
+               ## Diagnóstico automático
+
+               **Resumen**: 1-2 líneas de qué reporta el issue.
+
+               **Tipo**: bug / mejora / duda / documentación, y por qué.
+
+               **Área afectada**: archivo(s) y función(es) concretas, formato `game.js:123`.
+
+               **Causa raíz probable**: hipótesis técnica; indica explícitamente si es
+               especulativa por falta de información.
+
+               **Plan de solución**: pasos concretos para implementar el fix.
+
+               **Información faltante**: qué se necesita del autor si el issue es ambiguo
+               (pasos de repro, navegador, etc.). Omite esta sección si no aplica.
+
+            Reglas:
+            - No modifiques código, no abras PRs, no cierres el issue.
+            - Si el issue es spam, vacío o sin sentido, aplica el label `invalid` y dilo en
+              el comentario en vez de dar un diagnóstico técnico completo.
+            - Si el issue ya tiene un comentario de diagnóstico automático tuyo previo (por
+              ejemplo tras una edición), puedes publicar uno nuevo actualizado; no hace falta
+              borrar el anterior.

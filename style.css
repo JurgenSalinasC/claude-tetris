@@ -24,6 +24,9 @@
   --grid-line: #22222e;
   --block-highlight: rgba(255, 255, 255, 0.12);
   --board-shadow: rgba(0, 0, 0, 0.6);
+  --hidden-block: #33334a;
+  --combo-color: #7aa2f7;
+  --energy-fill: #81c784;
 }
 
 [data-theme="light"] {
@@ -46,6 +49,9 @@
   --grid-line: #d5d5e2;
   --block-highlight: rgba(0, 0, 0, 0.08);
   --board-shadow: rgba(0, 0, 0, 0.15);
+  --hidden-block: #b5b5c8;
+  --combo-color: #3b5bdb;
+  --energy-fill: #2e7d32;
 }
 
 body {
@@ -271,4 +277,191 @@ kbd {
 
 #restart-btn:hover {
   background: var(--btn-hover);
+}
+
+/* ---- Utilidad ---- */
+.hidden {
+  display: none !important;
+}
+
+/* ---- Combo / B2B ---- */
+.combo-value {
+  color: var(--combo-color);
+}
+
+.badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--btn-text);
+  background: var(--combo-color);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  letter-spacing: 1px;
+}
+
+/* ---- Objetivo (modo desafío) ---- */
+.objective-desc {
+  font-size: 11px;
+  color: var(--controls-text);
+}
+
+.objective-progress {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  color: var(--value-color);
+}
+
+/* ---- Hold ---- */
+#hold-canvas {
+  display: block;
+  border: 1px solid var(--board-border);
+  background: var(--board-bg);
+  border-radius: 4px;
+  transition: background 0.2s, border-color 0.2s, opacity 0.15s;
+}
+
+#hold-section.hold-locked #hold-canvas {
+  opacity: 0.35;
+}
+
+/* ---- Barra de energía ---- */
+.energy-bar {
+  width: 100%;
+  height: 12px;
+  border: 1px solid var(--kbd-border);
+  background: var(--kbd-bg);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.energy-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--energy-fill);
+  transition: width 0.15s;
+}
+
+.energy-bar.full {
+  animation: energy-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes energy-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(129, 199, 132, 0.6); }
+  50% { box-shadow: 0 0 8px 2px rgba(129, 199, 132, 0.6); }
+}
+
+.ability-status {
+  font-size: 11px;
+  color: var(--value-color);
+  min-height: 14px;
+}
+
+#menu-btn {
+  margin-top: 8px;
+  width: 100%;
+  background: var(--kbd-bg);
+  color: var(--fg);
+  border: 1px solid var(--kbd-border);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ---- Menú inicial ---- */
+.menu-box {
+  gap: 14px;
+  min-width: 220px;
+}
+
+.menu-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--value-color);
+}
+
+.menu-mode-btn {
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  border: none;
+  border-radius: 6px;
+  padding: 10px 28px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: background 0.15s;
+  width: 100%;
+}
+
+.menu-mode-btn:hover {
+  background: var(--btn-hover);
+}
+
+.challenge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.challenge-card,
+.ability-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  background: var(--kbd-bg);
+  border: 1px solid var(--kbd-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--fg);
+  transition: border-color 0.15s;
+}
+
+.challenge-card:hover,
+.ability-card:hover:not(.disabled) {
+  border-color: var(--value-color);
+}
+
+.challenge-name,
+.ability-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.challenge-desc,
+.ability-desc {
+  font-size: 11px;
+  color: var(--controls-text);
+}
+
+/* ---- Menú de habilidades ---- */
+.ability-box {
+  min-width: 260px;
+}
+
+.ability-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.ability-card {
+  align-items: flex-start;
+}
+
+.ability-card.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ability-icon {
+  font-size: 18px;
 }

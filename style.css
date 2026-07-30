@@ -117,6 +117,34 @@ body {
   transition: background 0.2s, border-color 0.2s;
 }
 
+/* ---- Power-ups ---- */
+.powerups {
+  display: flex;
+  gap: 6px;
+}
+
+.slot {
+  flex: 1;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  border: 1px solid var(--kbd-border);
+  background: var(--kbd-bg);
+  border-radius: 4px;
+}
+
+.slot.empty {
+  opacity: 0.35;
+}
+
+.freeze {
+  font-size: 11px;
+  color: var(--value-color);
+  min-height: 14px;
+}
+
 /* ---- Controles ---- */
 .controls ul {
   list-style: none;

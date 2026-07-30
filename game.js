@@ -18,6 +18,12 @@ const COLORS = [
   '#9575cd', // Y             - violeta
   '#fff176', // 1x1 (single)  - amarillo claro
   '#a1887f', // 3x3 hueca     - marrón
+  '#ce93d8', // comodín (tinte)
+  '#ef5350', // power-up: bomba
+  '#fff59d', // power-up: rayo
+  '#f48fb1', // power-up: tinte
+  '#80cbc4', // power-up: gravedad
+  '#81d4fa', // power-up: congelar
 ];
 
 const PIECES = [
@@ -34,6 +40,12 @@ const PIECES = [
   [[0,10,0,0],[10,10,0,0],[0,10,0,0],[0,10,0,0]],     // Y (pentominó)
   [[11]],                                              // 1x1 (single, recompensa Tetris)
   [[12,12,12],[12,0,12],[12,12,12]],                  // 3x3 hueca (reto)
+  [[13]],                                              // comodín (tinte, solo en tablero)
+  [[14]],                                              // power-up: bomba
+  [[15]],                                              // power-up: rayo
+  [[16]],                                              // power-up: tinte
+  [[17]],                                              // power-up: gravedad
+  [[18]],                                              // power-up: congelar
 ];
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
@@ -41,6 +53,18 @@ const STANDARD_TYPES = [1, 2, 3, 4, 5, 6, 7];
 const SPECIAL_TYPES = [8, 9, 10, 12]; // +, U, Y, 3x3 hueca (1x1 solo por recompensa)
 const SPECIAL_CHANCE = 0.10;
 const SINGLE_TYPE = 11;
+const WILD_TYPE = 13;
+const POWERUP_TYPES = [14, 15, 16, 17, 18]; // bomba, rayo, tinte, gravedad, congelar
+const INVENTORY_MAX = 3;
+const FREEZE_MS = 5000;
+
+// Icono y nombre por id de pieza especial (se pinta centrado en drawBlock)
+const PIECE_ICONS = {
+  13: '★', 14: '💥', 15: '⚡', 16: '🎨', 17: '⬇', 18: '❄',
+};
+const POWERUP_NAMES = {
+  14: 'Bomba', 15: 'Rayo', 16: 'Tinte', 17: 'Gravedad', 18: 'Congelar',
+};
 
 const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
@@ -54,11 +78,13 @@ const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
 const themeToggle = document.getElementById('theme-toggle');
+const powerupsEl = document.getElementById('powerups');
+const freezeIndicatorEl = document.getElementById('freeze-indicator');
 
 const THEME_KEY = 'tetris-theme';
 let themeColors = {};
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, pendingSingle;
+let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, forcedQueue, inventory, freezeRemaining;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -118,7 +144,8 @@ function merge() {
 function clearLines() {
   let cleared = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
-    if (board[r].every(v => v !== 0)) {
+    const row = board[r];
+    if (row.every(v => v !== 0) || row.some(v => v === WILD_TYPE)) {
       board.splice(r, 1);
       board.unshift(new Array(COLS).fill(0));
       cleared++;
@@ -126,11 +153,15 @@ function clearLines() {
     }
   }
   if (cleared) {
+    const prevLines = lines;
     lines += cleared;
-    score += (LINE_SCORES[cleared] || 0) * level;
+    score += (LINE_SCORES[cleared] ?? (800 + (cleared - 4) * 200)) * level;
     level = Math.floor(lines / 10) + 1;
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
-    if (cleared === 4) pendingSingle = true;
+    if (cleared >= 4) forcedQueue.push(SINGLE_TYPE);
+    if (Math.floor(lines / 5) > Math.floor(prevLines / 5)) {
+      forcedQueue.push(POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)]);
+    }
     updateHUD();
   }
 }
@@ -159,19 +190,83 @@ function softDrop() {
 }
 
 function lockPiece() {
+  if (POWERUP_TYPES.includes(current.type) && inventory.length < INVENTORY_MAX) {
+    inventory.push(current.type);
+    updatePowerupHUD();
+    spawn();
+    return;
+  }
   merge();
   clearLines();
   spawn();
 }
 
+function currentCenter() {
+  return {
+    cx: current.x + Math.floor(current.shape[0].length / 2),
+    cy: current.y + Math.floor(current.shape.length / 2),
+  };
+}
+
+function clearCell(r, c) {
+  if (r >= 0 && r < ROWS && c >= 0 && c < COLS) board[r][c] = 0;
+}
+
+function applyBomb() {
+  const { cx, cy } = currentCenter();
+  for (let r = cy - 1; r <= cy + 1; r++)
+    for (let c = cx - 1; c <= cx + 1; c++)
+      clearCell(r, c);
+}
+
+function applyBolt() {
+  const { cx, cy } = currentCenter();
+  if (cy >= 0 && cy < ROWS) for (let c = 0; c < COLS; c++) clearCell(cy, c);
+  for (let r = 0; r < ROWS; r++) clearCell(r, cx);
+}
+
+function applyDye() {
+  const colors = new Set();
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c] && board[r][c] !== WILD_TYPE) colors.add(board[r][c]);
+  if (!colors.size) return;
+  const list = [...colors];
+  const target = list[Math.floor(Math.random() * list.length)];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c] === target) board[r][c] = WILD_TYPE;
+}
+
+function applyGravity() {
+  for (let c = 0; c < COLS; c++) {
+    const values = [];
+    for (let r = 0; r < ROWS; r++)
+      if (board[r][c]) values.push(board[r][c]);
+    for (let r = ROWS - 1; r >= 0; r--)
+      board[r][c] = values.length ? values.pop() : 0;
+  }
+}
+
+function usePowerup(index) {
+  const type = inventory[index];
+  if (!type) return;
+  switch (type) {
+    case 14: applyBomb(); clearLines(); break;
+    case 15: applyBolt(); clearLines(); break;
+    case 16: applyDye(); clearLines(); break;
+    case 17: applyGravity(); clearLines(); break;
+    case 18: freezeRemaining = FREEZE_MS; break;
+    default: return;
+  }
+  inventory.splice(index, 1);
+  updatePowerupHUD();
+  updateHUD();
+}
+
 function spawn() {
   current = next;
-  if (pendingSingle) {
-    next = makePiece(SINGLE_TYPE);
-    pendingSingle = false;
-  } else {
-    next = randomPiece();
-  }
+  next = forcedQueue.length ? makePiece(forcedQueue.shift()) : randomPiece();
   if (collide(current.shape, current.x, current.y)) {
     endGame();
   }
@@ -184,6 +279,25 @@ function updateHUD() {
   levelEl.textContent = level;
 }
 
+function updatePowerupHUD() {
+  const slots = powerupsEl.querySelectorAll('.slot');
+  slots.forEach((slot, i) => {
+    const type = inventory[i];
+    if (type) {
+      slot.textContent = PIECE_ICONS[type];
+      slot.title = POWERUP_NAMES[type];
+      slot.classList.remove('empty');
+    } else {
+      slot.textContent = '';
+      slot.title = '';
+      slot.classList.add('empty');
+    }
+  });
+  freezeIndicatorEl.textContent = freezeRemaining > 0
+    ? `Congelado: ${(freezeRemaining / 1000).toFixed(1)}s`
+    : '';
+}
+
 function drawBlock(context, x, y, colorIndex, size, alpha) {
   if (!colorIndex) return;
   const color = COLORS[colorIndex];
@@ -193,6 +307,14 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   // highlight
   context.fillStyle = themeColors.blockHighlight;
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  const icon = PIECE_ICONS[colorIndex];
+  if (icon) {
+    context.fillStyle = '#1a1a25';
+    context.font = `${Math.floor(size * 0.6)}px system-ui, sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(icon, x * size + size / 2, y * size + size / 2 + 1);
+  }
   context.globalAlpha = 1;
 }
 
@@ -271,13 +393,19 @@ function togglePause() {
 function loop(ts) {
   const dt = ts - lastTime;
   lastTime = ts;
-  dropAccum += dt;
-  if (dropAccum >= dropInterval) {
+  if (freezeRemaining > 0) {
+    freezeRemaining = Math.max(0, freezeRemaining - dt);
     dropAccum = 0;
-    if (!collide(current.shape, current.x, current.y + 1)) {
-      current.y++;
-    } else {
-      lockPiece();
+    updatePowerupHUD();
+  } else {
+    dropAccum += dt;
+    if (dropAccum >= dropInterval) {
+      dropAccum = 0;
+      if (!collide(current.shape, current.x, current.y + 1)) {
+        current.y++;
+      } else {
+        lockPiece();
+      }
     }
   }
   draw();
@@ -291,13 +419,16 @@ function init() {
   level = 1;
   paused = false;
   gameOver = false;
-  pendingSingle = false;
+  forcedQueue = [];
+  inventory = [];
+  freezeRemaining = 0;
   dropInterval = 1000;
   dropAccum = 0;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
   updateHUD();
+  updatePowerupHUD();
   overlay.classList.add('hidden');
   cancelAnimationFrame(animId);
   animId = requestAnimationFrame(loop);
@@ -323,6 +454,11 @@ document.addEventListener('keydown', e => {
     case 'Space':
       e.preventDefault();
       hardDrop();
+      break;
+    case 'Digit1':
+    case 'Digit2':
+    case 'Digit3':
+      usePowerup(Number(e.code.slice(5)) - 1);
       break;
   }
   updateHUD();
